@@ -11,9 +11,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from database import engine, Base
 from routers import advisor, mutual_funds, stocks, insurance, tax
 
-# ---------------------------------------------------------------------------
-# Environment & logging
-# ---------------------------------------------------------------------------
 load_dotenv()
 
 logging.basicConfig(
@@ -23,36 +20,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger("finance_dashboard")
 
-# ---------------------------------------------------------------------------
-# Lifespan (startup / shutdown)
-# ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Create all database tables on startup."""
-    logger.info("Starting up 
-def Indian Finance Dashboard API 
-def â¦")
+    logger.info("Starting up Indian Finance Dashboard API...")
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created / verified successfully.")
     except SQLAlchemyError as exc:
         logger.error("Failed to initialise database tables: %s", exc)
         raise
+    yield
+    logger.info("Shutting down Indian Finance Dashboard API...")
 
-    yield  # application runs here
-
-    logger.info("Shutting down Indian Finance Dashboard API â¦")
-
-# ---------------------------------------------------------------------------
-# App instance
-# ---------------------------------------------------------------------------
 app = FastAPI(
     title="Indian Personal Finance Dashboard API",
     description=(
         "A comprehensive backend for managing personal finances in India. "
         "Covers mutual funds, stocks, insurance, tax planning, and AI-powered "
-        "financial advice 
-def tailored to Indian markets (INR)."
+        "financial advice tailored to Indian markets (INR)."
     ),
     version="1.0.0",
     contact={
@@ -65,9 +51,6 @@ def tailored to Indian markets (INR)."
     lifespan=lifespan,
 )
 
-# ---------------------------------------------------------------------------
-# CORS
-# ---------------------------------------------------------------------------
 allowed_origins: list[str] = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -85,9 +68,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# Request logging middleware
-# ---------------------------------------------------------------------------
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """Log every incoming request and its processing time."""
@@ -98,10 +78,9 @@ async def log_requests(request: Request, call_next):
         request.url.path,
         request.client.host if request.client else "unknown",
     )
-
     try:
         response = await call_next(request)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         elapsed = (time.perf_counter() - start) * 1000
         logger.error(
             "Unhandled exception during %s %s after %.2f ms: %s",
@@ -111,7 +90,6 @@ async def log_requests(request: Request, call_next):
             exc,
         )
         raise
-
     elapsed = (time.perf_counter() - start) * 1000
     logger.info(
         "Completed %s %s  | status=%s | %.2f ms",
@@ -123,9 +101,6 @@ async def log_requests(request: Request, call_next):
     response.headers["X-Process-Time-Ms"] = f"{elapsed:.2f}"
     return response
 
-# ---------------------------------------------------------------------------
-# Global exception handlers
-# ---------------------------------------------------------------------------
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     logger.warning(
@@ -145,7 +120,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         },
     )
 
-
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     logger.error(
@@ -163,7 +137,6 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
             "path": str(request.url.path),
         },
     )
-
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
@@ -183,45 +156,15 @@ async def generic_exception_handler(request: Request, exc: Exception):
         },
     )
 
-# ---------------------------------------------------------------------------
-# Routers
-# ---------------------------------------------------------------------------
-app.include_router(
-    advisor.router,
-    prefix="/api/v1/advisor",
-    tags=["AI Financial Advisor"],
-)
-app.include_router(
-    mutual_funds.router,
-    prefix="/api/v1/mutual-funds",
-    tags=["Mutual Funds"],
-)
-app.include_router(
-    stocks.router,
-    prefix="/api/v1/stocks",
-    tags=["Stocks & Equities"],
-)
-app.include_router(
-    insurance.router,
-    prefix="/api/v1/insurance",
-    tags=["Insurance"],
-)
-app.include_router(
-    tax.router,
-    prefix="/api/v1/tax",
-    tags=["Tax Planning"],
-)
+app.include_router(advisor.router, prefix="/api/v1/advisor", tags=["AI Financial Advisor"])
+app.include_router(mutual_funds.router, prefix="/api/v1/mutual-funds", tags=["Mutual Funds"])
+app.include_router(stocks.router, prefix="/api/v1/stocks", tags=["Stocks & Equities"])
+app.include_router(insurance.router, prefix="/api/v1/insurance", tags=["Insurance"])
+app.include_router(tax.router, prefix="/api/v1/tax", tags=["Tax Planning"])
 
-# ---------------------------------------------------------------------------
-# Root & health endpoints
-# ---------------------------------------------------------------------------
 @app.get("/", tags=["Root"], summary="API information")
 async def root():
-    """
-    Returns basic metadata about the Indian Finance Dashboard API.
-    All monetary values throughout the API are expressed in **Indian Rupees (INR 
-def â¹)**.
-    """
+    """Returns basic metadata about the Indian Finance Dashboard API."""
     return {
         "name": "Indian Personal Finance Dashboard API",
         "version": "1.0.0",
@@ -230,7 +173,7 @@ def â¹)**.
             "Supports mutual funds, equities, insurance, tax planning, and "
             "AI-driven advisory services."
         ),
-        "currency": "INR (â¹)",
+        "currency": "INR (Rs.)",
         "documentation": "/docs",
         "redoc": "/redoc",
         "health": "/health",
@@ -243,29 +186,20 @@ def â¹)**.
         },
     }
 
-
 @app.get("/health", tags=["Health"], summary="Health check")
 async def health_check():
-    """
-    Performs a lightweight liveness / readiness check.
-
-    * Verifies the database connection is reachable.
-    * Returns HTTP 200 when healthy, HTTP 503 when the database is unavailable.
-    """
+    """Performs a lightweight liveness/readiness check."""
     db_status = "ok"
     db_message = "Database connection is healthy."
-
     try:
         with engine.connect() as connection:
             connection.execute(__import__("sqlalchemy").text("SELECT 1"))
     except SQLAlchemyError as exc:
-        logger.error("Health check â database unreachable: %s", exc)
+        logger.error("Health check - database unreachable: %s", exc)
         db_status = "error"
         db_message = "Database connection failed."
-
     overall_status = "healthy" if db_status == "ok" else "unhealthy"
     http_status_code = 200 if db_status == "ok" else 503
-
     response_body = {
         "status": overall_status,
         "api_version": "1.0.0",
@@ -277,8 +211,6 @@ async def health_check():
         },
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-
     if http_status_code != 200:
         return JSONResponse(status_code=http_status_code, content=response_body)
-
     return response_body
